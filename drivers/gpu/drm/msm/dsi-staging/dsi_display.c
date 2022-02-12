@@ -187,6 +187,7 @@ void dsi_rect_intersect(const struct dsi_rect *r1,
 	}
 }
 
+bool is_dimlayer_bl_enable;
 int dsi_display_set_backlight(struct drm_connector *connector,
 		void *display, u32 bl_lvl)
 {
@@ -216,8 +217,11 @@ int dsi_display_set_backlight(struct drm_connector *connector,
 	bl_scale_ad = panel->bl_config.bl_scale_ad;
 	bl_temp = (u32)bl_temp * bl_scale_ad / MAX_AD_BL_SCALE_LEVEL;
 
-	pr_debug("bl_scale = %u, bl_scale_ad = %u, bl_lvl = %u\n",
-		bl_scale, bl_scale_ad, (u32)bl_temp);
+	if (is_dimlayer_bl_enable)
+		bl_temp = bl_temp > panel->bl_config.bl_dimlayer_dc_level ? bl_temp : panel->bl_config.bl_dimlayer_dc_level;
+
+	pr_debug("bl_scale = %u, bl_scale_ad = %u, bl_lvl = %u, is_dimlayer_bl_enable = %d\n",
+		bl_scale, bl_scale_ad, (u32)bl_temp, is_dimlayer_bl_enable);
 
 	rc = dsi_display_clk_ctrl(dsi_display->dsi_clk_handle,
 			DSI_CORE_CLK, DSI_CLK_ON);
@@ -5236,6 +5240,21 @@ error:
 	return ret == 0 ? count : ret;
 }
 
+static ssize_t sysfs_dimlayer_bl_read(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", is_dimlayer_bl_enable);
+}
+
+static ssize_t sysfs_dimlayer_bl_write(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	int enabled = 0;
+	sscanf(buf, "%d", &enabled);
+	is_dimlayer_bl_enable = enabled > 0;
+	return count;
+}
+
 bool is_dimlayer_hbm_enabled;
 static ssize_t sysfs_dimlayer_hbm_read(struct device *dev,
 	struct device_attribute *attr, char *buf)
@@ -5262,6 +5281,10 @@ static ssize_t sysfs_dimlayer_hbm_write(struct device *dev,
 	return count;
 }
 
+static DEVICE_ATTR(dimlayer_bl, 0664,
+			sysfs_dimlayer_bl_read,
+			sysfs_dimlayer_bl_write);
+
 static DEVICE_ATTR(dimlayer_hbm, 0664,
 			sysfs_dimlayer_hbm_read,
 			sysfs_dimlayer_hbm_write);
@@ -5286,6 +5309,7 @@ static struct attribute *display_fs_attrs[] = {
 	&dev_attr_doze_status.attr,
 	&dev_attr_doze_mode.attr,
 	&dev_attr_fod_ui.attr,
+	&dev_attr_dimlayer_bl.attr,
 	&dev_attr_hbm.attr,
 	&dev_attr_dimlayer_hbm.attr,
 	NULL,
